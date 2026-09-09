@@ -13,7 +13,7 @@ export type Member = {
   role: "admin" | "team_lead" | "compliance";
 };
 
-// Replace "org_YOUR_ACME_ID" and "org_YOUR_STRAWBERRY_ID" with real WorkOS Org IDs that I creqted in the dashboard
+// `organizationId` values are real WorkOS Organization IDs created in the dashboard.
 const MEMBERS: Member[] = [
   // Tenant 1: Acme Corp
   { 

@@ -1,6 +1,6 @@
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db"; //db.ts, where test user's info is in the local db
+import { db } from "@/lib/db";
 
 // Lists the members of the caller's workspace.
 //
@@ -9,8 +9,6 @@ import { db } from "@/lib/db"; //db.ts, where test user's info is in the local d
 // can only ever see members of the organization they're signed in to.
 export async function GET() {
   const { user, organizationId } = await withAuth();
-  console.log('--- DEBUG WORKOS SESSION ---');
-  console.log('Active Organization ID from WorkOS:', organizationId);
   if (!user || !organizationId) {
     return NextResponse.json(
       { error: "Unauthorized: missing active workspace" },
