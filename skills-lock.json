@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "workos": {
+      "source": "workos/skills",
+      "sourceType": "github",
+      "skillPath": "plugins/workos/skills/workos/SKILL.md",
+      "computedHash": "749575415099db2949a4a0d1d66c276c3eec290407f741cb5ebfbfb8cbb215a4"
+    },
+    "workos-widgets": {
+      "source": "workos/skills",
+      "sourceType": "github",
+      "skillPath": "plugins/workos/skills/workos-widgets/SKILL.md",
+      "computedHash": "138d1733d9b92be8cae10dc8d7538e0a161c89d7b9330c335b35c27f8e13b781"
+    }
+  }
+}
