@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
 
   let roleSlug = DEFAULT_ROLE;
   if (rawRole !== undefined) {
-    if (!isAssignableRole(rawRole)) {
+    if (typeof rawRole !== "string" || !isAssignableRole(rawRole)) {
       return NextResponse.json({ error: "`role` is not an assignable role" }, { status: 400 });
     }
     roleSlug = rawRole;

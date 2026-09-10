@@ -106,7 +106,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
   }
 
   const { role: rawRole } = body as Record<string, unknown>;
-  if (!isAssignableRole(rawRole)) {
+  if (typeof rawRole !== "string" || !isAssignableRole(rawRole)) {
     return NextResponse.json({ error: "`role` is not an assignable role" }, { status: 400 });
   }
 
