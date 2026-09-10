@@ -84,20 +84,36 @@ describe("POST /api/get-name/members/invite", () => {
     expect(mockSendInvitation).not.toHaveBeenCalled();
   });
 
-  it("returns 403 when the caller is not an admin", async () => {
-    for (const role of ["team_lead", "compliance"]) {
-      mockWithAuth.mockResolvedValue(session({ role }));
+  it("returns 403 for a compliance user (strictly read-only)", async () => {
+    mockWithAuth.mockResolvedValue(session({ role: "compliance" }));
 
-      const res = await POST(inviteRequest({ email: "new@acme.test" }));
+    const res = await POST(inviteRequest({ email: "new@acme.test" }));
 
-      expect(res.status).toBe(403);
-      await expect(res.json()).resolves.toEqual({ error: "Forbidden: admin role required" });
-    }
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toEqual({ error: "Forbidden: insufficient role" });
     expect(mockSendInvitation).not.toHaveBeenCalled();
   });
 
-  it("accepts the admin role from the `roles` array too", async () => {
-    mockWithAuth.mockResolvedValue(session({ role: undefined, roles: ["admin"] }));
+  it("returns 403 for a role outside the invite allowlist", async () => {
+    mockWithAuth.mockResolvedValue(session({ role: "auditor" }));
+
+    const res = await POST(inviteRequest({ email: "new@acme.test" }));
+
+    expect(res.status).toBe(403);
+    expect(mockSendInvitation).not.toHaveBeenCalled();
+  });
+
+  it("allows a team lead to invite", async () => {
+    mockWithAuth.mockResolvedValue(session({ role: "team_lead" }));
+
+    const res = await POST(inviteRequest({ email: "new@acme.test" }));
+
+    expect(res.status).toBe(201);
+    expect(mockSendInvitation).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts an allowed role from the `roles` array too", async () => {
+    mockWithAuth.mockResolvedValue(session({ role: undefined, roles: ["team_lead"] }));
 
     const res = await POST(inviteRequest({ email: "new@acme.test" }));
 

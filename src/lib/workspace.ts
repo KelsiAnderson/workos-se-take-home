@@ -1,47 +1,69 @@
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import { NextResponse } from "next/server";
-import { ADMIN_ROLE } from "@/lib/roles";
+import { ADMIN_ROLE, type RoleSlug } from "@/lib/roles";
 
 export type Workspace = { userId: string; organizationId: string };
 
-// Resolves the caller's workspace from the signed AuthKit session.
+// Centralized server-side security checks for the API routes.
 //
-// Identity and tenant are read from the session cookie only — never from the
-// request URL, body, or query. Returns a ready-to-send NextResponse (401) when
-// there is no signed-in user with an active workspace:
+// Identity, tenant, and role are read from the signed AuthKit session cookie
+// (via withAuth) and nowhere else — never from the request URL, body, query, or
+// a client-supplied header. That is the whole point of doing this on the
+// server: a caller cannot tamper with who they are or what they're allowed to
+// do by editing a parameter.
 //
-//   const workspace = await requireWorkspace();
+// Both helpers return a ready-to-send NextResponse on failure rather than
+// throwing, so a route handler stays a straight line:
+//
+//   const workspace = await requireRole([ROLES.admin]);
 //   if (workspace instanceof NextResponse) return workspace;
+//   // ...workspace.userId / workspace.organizationId are now trustworthy
+
+const unauthorized = () =>
+  NextResponse.json(
+    { error: "Unauthorized: missing active workspace" },
+    { status: 401 },
+  );
+
+const forbidden = () =>
+  NextResponse.json({ error: "Forbidden: insufficient role" }, { status: 403 });
+
+// Resolves the caller's workspace from the signed session. 401 when there is no
+// valid user or no active organization on the cookie.
 export async function requireWorkspace(): Promise<Workspace | NextResponse> {
   const { user, organizationId } = await withAuth();
 
   if (!user || !organizationId) {
-    return NextResponse.json(
-      { error: "Unauthorized: missing active workspace" },
-      { status: 401 },
-    );
+    return unauthorized();
   }
 
   return { userId: user.id, organizationId };
 }
 
-// Like requireWorkspace, but also requires the caller to hold the `admin` role
-// for that workspace (403 otherwise). Every state-changing member/invitation
-// route gates through this.
-export async function requireAdminWorkspace(): Promise<Workspace | NextResponse> {
-  const { user, organizationId, role, roles } = await withAuth();
+// Resolves the caller's workspace and confirms they hold at least one of
+// `allowedRoles`. 401 when unauthenticated (delegated to requireWorkspace),
+// 403 when authenticated but lacking every allowed role.
+//
+// AuthKit may surface the caller's role as a single `role` slug, a `roles`
+// array, or both depending on how the environment is configured; we accept a
+// match in either.
+export async function requireRole(
+  allowedRoles: RoleSlug[],
+): Promise<Workspace | NextResponse> {
+  const workspace = await requireWorkspace();
+  if (workspace instanceof NextResponse) return workspace;
 
-  if (!user || !organizationId) {
-    return NextResponse.json(
-      { error: "Unauthorized: missing active workspace" },
-      { status: 401 },
-    );
-  }
+  const { role, roles } = await withAuth();
+  const held = new Set<string>([...(role ? [role] : []), ...(roles ?? [])]);
 
-  const isAdmin = role === ADMIN_ROLE || roles?.includes(ADMIN_ROLE) === true;
-  if (!isAdmin) {
-    return NextResponse.json({ error: "Forbidden: admin role required" }, { status: 403 });
-  }
+  const permitted = allowedRoles.some((allowed) => held.has(allowed));
+  if (!permitted) return forbidden();
 
-  return { userId: user.id, organizationId };
+  return workspace;
+}
+
+// Convenience wrapper: the common case of "must be an admin". Every
+// state-changing member/invitation route gates through this.
+export function requireAdminWorkspace(): Promise<Workspace | NextResponse> {
+  return requireRole([ADMIN_ROLE]);
 }

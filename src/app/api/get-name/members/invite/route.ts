@@ -1,18 +1,19 @@
 import { getWorkOS } from "@workos-inc/authkit-nextjs";
 import { NextRequest, NextResponse } from "next/server";
-import { DEFAULT_ROLE, isAssignableRole } from "@/lib/roles";
+import { DEFAULT_ROLE, ROLES, isAssignableRole } from "@/lib/roles";
 import { isCrossOrigin } from "@/lib/http";
-import { requireAdminWorkspace } from "@/lib/workspace";
+import { requireRole } from "@/lib/workspace";
 
 // Invites a new member into the caller's workspace.
 //
 // Tenant isolation: `organizationId` is read from the signed AuthKit session
 // (via withAuth), never from the request body. The invite is pinned to that
-// organization, so an admin can only ever add people to their own workspace.
+// organization, so a caller can only ever add people to their own workspace.
 //
 // Authorization: the caller must be signed in, have an active workspace, and
-// hold the `admin` role for that workspace. Team leads and compliance users
-// get 403.
+// hold the `admin` or `team_lead` role for that workspace — team leads look
+// after their own people, so bringing someone in is part of the job. Compliance
+// users are strictly read-only and get 403.
 
 // Keep the response to a safe projection. The raw WorkOS Invitation object
 // also carries `token` and `acceptInvitationUrl`; those are delivered to the
@@ -30,8 +31,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Cross-origin request rejected" }, { status: 403 });
   }
 
-  // Identity, tenant, and the admin check all come from the signed session.
-  const workspace = await requireAdminWorkspace();
+  // Identity, tenant, and the role check all come from the signed session.
+  const workspace = await requireRole([ROLES.admin, ROLES.team_lead]);
   if (workspace instanceof NextResponse) return workspace;
   const { userId, organizationId } = workspace;
 
