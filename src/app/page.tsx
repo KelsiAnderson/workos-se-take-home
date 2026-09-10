@@ -28,7 +28,12 @@ export default async function HomePage() {
           <Text size="5" color="gray" mb="4">
             Sign in to view your account details
           </Text>
-          <SignInButton large />
+          <Flex align="center" gap="3">
+            <SignInButton large />
+            <Button asChild size="3" variant="soft">
+              <a href="/login?org=acme">Sign in to Acme Corp (Okta)</a>
+            </Button>
+          </Flex>
         </>
       )}
     </Flex>
