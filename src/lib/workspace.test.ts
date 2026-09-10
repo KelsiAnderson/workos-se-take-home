@@ -50,12 +50,16 @@ describe("requireWorkspace", () => {
 });
 
 describe("requireRole", () => {
-  it("passes when `role` is in the allowlist", async () => {
+  it("passes when `role` is in the allowlist and returns the held roles", async () => {
     mockWithAuth.mockResolvedValue(session({ role: "team_lead" }));
 
     const result = await requireRole([ROLES.team_lead, ROLES.admin]);
 
-    expect(result).toEqual({ userId: "user_1", organizationId: "org_acme" });
+    expect(result).toEqual({
+      userId: "user_1",
+      organizationId: "org_acme",
+      roles: ["team_lead"],
+    });
   });
 
   it("passes when a `roles` array entry is in the allowlist", async () => {
@@ -65,7 +69,11 @@ describe("requireRole", () => {
 
     const result = await requireRole([ROLES.team_lead]);
 
-    expect(result).toEqual({ userId: "user_1", organizationId: "org_acme" });
+    expect(result).toEqual({
+      userId: "user_1",
+      organizationId: "org_acme",
+      roles: ["compliance", "team_lead"],
+    });
   });
 
   it("returns 403 when the caller holds none of the allowed roles", async () => {

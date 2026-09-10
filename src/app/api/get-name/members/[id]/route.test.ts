@@ -155,6 +155,13 @@ describe("PATCH /api/get-name/members/[id]", () => {
     });
   });
 
+  it("lets an admin promote a member to admin", async () => {
+    const res = await PATCH(req({ role: "admin" }), ctx("om_lead"));
+
+    expect(res.status).toBe(200);
+    expect(mockUpdateMembership).toHaveBeenCalledWith("om_lead", { roleSlug: "admin" });
+  });
+
   it("refuses to demote the last remaining admin", async () => {
     activeMembers = [MEMBERSHIPS.om_lead, MEMBERSHIPS.om_admin]; // exactly one admin
 

@@ -50,7 +50,7 @@ export const ROLE_DEFINITIONS: Record<
   },
 };
 
-// The roles an admin may assign via an invite or a role change. Anything
+// The roles that can be assigned via an invite or a role change at all. Anything
 // outside this allowlist is rejected before it reaches WorkOS, so a caller
 // can't grant an unknown/misspelled slug or a privileged role we don't model.
 const ASSIGNABLE_ROLES: readonly RoleSlug[] = [
@@ -61,4 +61,29 @@ const ASSIGNABLE_ROLES: readonly RoleSlug[] = [
 
 export function isAssignableRole(role: string): role is RoleSlug {
   return (ASSIGNABLE_ROLES as readonly string[]).includes(role);
+}
+
+// Which roles a caller may hand out, keyed by the caller's own role. Being
+// allowed to invite is not the same as being allowed to grant any role: a team
+// lead brings their own people in, but only an admin creates other admins.
+// Without this, "invite" is a privilege-escalation path — a team lead could
+// mint an admin and inherit workspace-wide control.
+const GRANTABLE_BY_ROLE: Record<RoleSlug, readonly RoleSlug[]> = {
+  [ROLES.admin]: [ROLES.admin, ROLES.team_lead, ROLES.compliance],
+  [ROLES.team_lead]: [ROLES.team_lead, ROLES.compliance],
+  [ROLES.compliance]: [],
+};
+
+// True when a caller holding `callerRoles` is permitted to assign `targetRole`.
+// `targetRole` is assumed to have already passed isAssignableRole().
+export function canGrantRole(
+  callerRoles: readonly string[],
+  targetRole: string,
+): boolean {
+  return callerRoles.some((role) => {
+    const grantable = GRANTABLE_BY_ROLE[role as RoleSlug] as
+      | readonly string[]
+      | undefined;
+    return grantable?.includes(targetRole) === true;
+  });
 }

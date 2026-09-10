@@ -1,6 +1,6 @@
 import { getWorkOS } from "@workos-inc/authkit-nextjs";
 import { NextRequest, NextResponse } from "next/server";
-import { DEFAULT_ROLE, ROLES, isAssignableRole } from "@/lib/roles";
+import { DEFAULT_ROLE, ROLES, canGrantRole, isAssignableRole } from "@/lib/roles";
 import { isCrossOrigin } from "@/lib/http";
 import { requireRole } from "@/lib/workspace";
 
@@ -14,6 +14,11 @@ import { requireRole } from "@/lib/workspace";
 // hold the `admin` or `team_lead` role for that workspace — team leads look
 // after their own people, so bringing someone in is part of the job. Compliance
 // users are strictly read-only and get 403.
+//
+// Being allowed to invite is not the same as being allowed to grant any role:
+// a team lead can invite `team_lead`/`compliance` but not `admin`, otherwise
+// the invite endpoint becomes a way for a team lead to escalate to admin. The
+// per-role grant matrix lives in @/lib/roles (canGrantRole).
 
 // Keep the response to a safe projection. The raw WorkOS Invitation object
 // also carries `token` and `acceptInvitationUrl`; those are delivered to the
@@ -34,7 +39,7 @@ export async function POST(request: NextRequest) {
   // Identity, tenant, and the role check all come from the signed session.
   const workspace = await requireRole([ROLES.admin, ROLES.team_lead]);
   if (workspace instanceof NextResponse) return workspace;
-  const { userId, organizationId } = workspace;
+  const { userId, organizationId, roles: callerRoles } = workspace;
 
   // Parse and validate the body. A missing or malformed body is a 400, never
   // a 500.
@@ -65,6 +70,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "`role` is not an assignable role" }, { status: 400 });
     }
     roleSlug = rawRole;
+  }
+
+  // A caller can only hand out a role at or below their own authority. This is
+  // what stops a team lead from inviting someone straight in as an admin.
+  if (!canGrantRole(callerRoles, roleSlug)) {
+    return NextResponse.json(
+      { error: "Your role cannot assign that role" },
+      { status: 403 },
+    );
   }
 
   try {

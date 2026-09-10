@@ -1,6 +1,6 @@
 import { getWorkOS } from "@workos-inc/authkit-nextjs";
 import { NextRequest, NextResponse } from "next/server";
-import { ADMIN_ROLE, isAssignableRole } from "@/lib/roles";
+import { ADMIN_ROLE, canGrantRole, isAssignableRole } from "@/lib/roles";
 import { isCrossOrigin } from "@/lib/http";
 import { requireAdminWorkspace } from "@/lib/workspace";
 
@@ -91,7 +91,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
   const workspace = await requireAdminWorkspace();
   if (workspace instanceof NextResponse) return workspace;
-  const { organizationId } = workspace;
+  const { organizationId, roles: callerRoles } = workspace;
 
   const { id } = await params;
 
@@ -108,6 +108,17 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
   const { role: rawRole } = body as Record<string, unknown>;
   if (typeof rawRole !== "string" || !isAssignableRole(rawRole)) {
     return NextResponse.json({ error: "`role` is not an assignable role" }, { status: 400 });
+  }
+
+  // Only hand out a role at or below the caller's own authority. The route is
+  // admin-only today, so an admin granting `admin` always passes; the check is
+  // here so the invariant still holds if this gate is ever widened (as the
+  // invite route's was) to let non-admins change roles.
+  if (!canGrantRole(callerRoles, rawRole)) {
+    return NextResponse.json(
+      { error: "Your role cannot assign that role" },
+      { status: 403 },
+    );
   }
 
   try {

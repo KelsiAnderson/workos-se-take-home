@@ -121,6 +121,43 @@ describe("POST /api/get-name/members/invite", () => {
     expect(mockSendInvitation).toHaveBeenCalledTimes(1);
   });
 
+  it("stops a team lead from inviting a new admin (privilege escalation)", async () => {
+    mockWithAuth.mockResolvedValue(session({ role: "team_lead" }));
+
+    const res = await POST(
+      inviteRequest({ email: "new@acme.test", role: "admin" }),
+    );
+
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toEqual({
+      error: "Your role cannot assign that role",
+    });
+    expect(mockSendInvitation).not.toHaveBeenCalled();
+  });
+
+  it("lets a team lead invite a team lead or compliance user", async () => {
+    mockWithAuth.mockResolvedValue(session({ role: "team_lead" }));
+
+    for (const role of ["team_lead", "compliance"]) {
+      const res = await POST(inviteRequest({ email: `${role}@acme.test`, role }));
+      expect(res.status).toBe(201);
+    }
+    expect(mockSendInvitation).toHaveBeenCalledTimes(2);
+  });
+
+  it("lets an admin invite another admin", async () => {
+    mockWithAuth.mockResolvedValue(session({ role: "admin" }));
+
+    const res = await POST(
+      inviteRequest({ email: "new@acme.test", role: "admin" }),
+    );
+
+    expect(res.status).toBe(201);
+    expect(mockSendInvitation).toHaveBeenCalledWith(
+      expect.objectContaining({ roleSlug: "admin" }),
+    );
+  });
+
   it("invites into the caller's organization and records the inviter", async () => {
     mockWithAuth.mockResolvedValue(session({ organizationId: "org_acme" }));
 
