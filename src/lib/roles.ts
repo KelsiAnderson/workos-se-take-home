@@ -4,7 +4,7 @@
 // run it, the team leads who look after their own reports, and the compliance
 // folks who must be able to see everything but change nothing. Each maps to
 // exactly one slug below, and these slugs mirror the roles configured on the
-// WorkOS Organization and the demo data layer (see src/lib/db.ts).
+// WorkOS Organization.
 //
 // Keeping them here means the invite route and the role-change route validate
 // against the same allowlist, so there is one definition of "which roles an
