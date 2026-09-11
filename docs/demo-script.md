@@ -14,10 +14,14 @@ session — what's on screen in VS Code will match what you say, word for word.
 - Tab 2: `dashboard.workos.com` → Organizations
 
 **Right half — VS Code:**
-- Tab 3: `src/lib/workspace.ts`
-- Tab 4: `src/app/api/get-name/members/invite/route.ts`
-- Tab 5: `src/lib/roles.ts`
-- Tab 6 (split): `src/app/callback/route.ts` + `src/middleware.ts`
+- Tab 3: `src/lib/workspace.ts` (Act 1)
+- Tab 4: `src/app/api/get-name/members/invite/route.ts` (Act 2)
+- Tab 5: `src/lib/roles.ts` (Act 2 + Act 3)
+- Tab 6: `src/app/api/get-name/members/[id]/route.ts` (Act 2 — last-admin guards)
+- Tab 7: `src/lib/http.ts` (Act 2 — `isCrossOrigin`)
+- Tab 8: `src/app/login/route.ts` (Act 4)
+- Tab 9: `src/lib/tenants.ts` (Act 4 + Act 5 — this is the one you'll live-edit for the session-cutoff demo)
+- Tab 10 (split): `src/app/callback/route.ts` + `src/middleware.ts` (Act 5)
 - Integrated terminal, bottom: run `npm test` once beforehand so it's sitting
   there green and ready to re-run on camera.
 
@@ -80,16 +84,23 @@ export async function requireRole(
 > checks it against an explicit allowlist before anything else runs. Fail either
 > check and the handler returns a `NextResponse` right there — 401 unauthenticated,
 > 403 authenticated-but-wrong-role — and nothing downstream, no WorkOS call, no
-> data read, ever executes for a caller who shouldn't be there."
+> data read, ever executes for a caller who shouldn't be there.
+>
+> That's the mechanism. In a few minutes, once we've met Northwind — a
+> completely separate customer on this same deployment — I'll put their member
+> list next to Acme's on this exact same screen, so you can see the isolation
+> directly instead of taking my word for the code."
 
 ---
 
 ## Act 2 — Self-serve admin actions, without the API key in the browser (1:15–2:45)
 
 **UI:**
-1. Tab 1, still `/members`. In the invite row: `test.invite@acme.test`, role **Team Lead**, click **Send invite**.
-2. Point out: nothing changes in the members table (they haven't accepted yet) — scroll to **Pending invitations** below it, where the new row actually appears.
-3. Click **Remove** on your own row (`kelsi@ochithreads.com`). Point at the callout: `Remove failed (409): Cannot remove the last admin`.
+1. Tab 1, still `/members`, signed in as `kelsi@ochithreads.com` (Acme's admin). Open DevTools → **Network** tab, leave it visible.
+2. In the invite form: type `kelsi.test@strawberry.com`, select role **Team Lead**.
+3. Click **Send invite** — as it fires, click the `invite` request that just appeared in the Network panel. Show the request: a session cookie and a `{email, role}` JSON body — no `Authorization` header, no API key anywhere in it.
+4. Back in the app: the main Members table hasn't changed — they haven't accepted yet. Scroll to **Pending invitations** below it, where the new row actually appears.
+5. Click **Remove** on your own row (`kelsi@ochithreads.com`). Point at the red callout at the top of the page: `Remove failed (409): Cannot remove the last admin`.
 
 **Code — `src/app/api/get-name/members/invite/route.ts`:**
 ```ts
@@ -124,9 +135,11 @@ try {
 **Say:**
 > "You asked whether we could just call WorkOS directly from the frontend with
 > the API key — we didn't, deliberately. Put the key in a browser bundle and
-> DevTools' Network tab hands anyone your credential to WorkOS. Every mutation
-> goes through our own Next.js route handlers instead, where three things
-> happen before WorkOS is ever touched:
+> DevTools' Network tab hands anyone your credential to WorkOS. You're looking
+> at that Network tab right now — session cookie, a plain JSON body, no
+> `Authorization` header, no key. Every mutation goes through our own Next.js
+> route handlers instead, where three things happen before WorkOS is ever
+> touched:
 >
 > One — `canGrantRole` checks the role being granted against the *caller's*
 > role, not just whether the role exists. A team lead can invite a team lead or
@@ -256,7 +269,8 @@ export const GET = async (request: NextRequest) => {
 1. Tab 2 → Organizations → **Northwind Traders** → the authentication/policy tab → point at **MFA: Required**.
 2. Tab 2 → Organizations → **Acme Corp** → same tab → point out MFA is not required there — different tenant, different policy, no shared switch.
 3. Tab 1 → incognito → `http://localhost:3000/login?org=northwind` → sign in as the Northwind admin user → show the TOTP enrollment / challenge screen firing.
-4. **Show the cutoff actually happening**, live: in VS Code, temporarily change `src/lib/tenants.ts` — `maxSessionAgeHours: 24` → `0.011` (~40 seconds) — save (dev hot-reloads). Reload `/account` after the window passes → redirected to `/login?org=northwind&error=session_expired`, and the session cookies are gone from devtools. Set it back to `24` immediately after and show the file saved.
+4. **The isolation proof.** Click **Members** in the header nav. Put this window next to the Acme members screenshot/recording from Act 1 (or just narrate the contrast if you're not doing picture-in-picture): completely different roster, none of the Acme names, nobody from Northwind shows up if you flip back to Acme's tab either. Same route, same component, same code from Act 1 — the only thing that changed is which `organizationId` is in the session cookie. There is no URL parameter, no dropdown, no client-side switch that lets either tenant point this page at the other's data.
+5. **Show the cutoff actually happening**, live: in VS Code, temporarily change `src/lib/tenants.ts` — `maxSessionAgeHours: 24` → `0.011` (~40 seconds) — save (dev hot-reloads). Reload `/account` after the window passes → redirected to `/login?org=northwind&error=session_expired`, and the session cookies are gone from devtools. Set it back to `24` immediately after and show the file saved.
 
 **Code — `src/app/callback/route.ts`:**
 ```ts
@@ -315,6 +329,14 @@ return handleAuthkitHeaders(request, headers);
 > being upfront about: WorkOS's policy applies to *non-SSO* members, org-wide —
 > there's no "admins only" toggle. Since Northwind is a password-based org,
 > that satisfies "admins must use MFA" and then some.
+>
+> And here's requirement one again, proven directly this time instead of read
+> off a code file: this is the identical `/members` screen you watched populate
+> with Acme's team in the first minute. Northwind's admin sees Northwind's
+> people. Nobody from Acme is reachable from here, and there's no toggle,
+> parameter, or dropdown that would let one tenant look into the other's
+> workspace — the isolation isn't a UI choice, it's that the server never
+> fetches data for any organization except the one in your signed session.
 >
 > The 24-hour cutoff was the harder half, because WorkOS session length is an
 > environment-wide setting, not per-organization — turning it on for Northwind

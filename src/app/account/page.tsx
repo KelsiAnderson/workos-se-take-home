@@ -1,46 +1,56 @@
 import { withAuth } from "@workos-inc/authkit-nextjs";
-import { Text, Heading, TextField, Flex, Box } from "@radix-ui/themes";
+import { Text, Heading, Flex, Badge } from "@radix-ui/themes";
+import { ROLES, ROLE_DEFINITIONS, type RoleSlug } from "@/lib/roles";
+import { tenantByOrganizationId } from "@/lib/tenants";
 
 export default async function AccountPage() {
-  const { user, role, permissions } = await withAuth({ ensureSignedIn: true });
+  const { user, organizationId, role, roles } = await withAuth({
+    ensureSignedIn: true,
+  });
 
-  const userFields = [
-    ["First name", user?.firstName],
-    ["Last name", user?.lastName],
-    ["Email", user?.email],
-    role ? ["Role", role] : [],
-    permissions ? ["Permissions", permissions] : [],
-    ["Id", user?.id],
-  ].filter((arr) => arr.length > 0);
+  const held = new Set<string>([...(role ? [role] : []), ...(roles ?? [])]);
+  const callerRole =
+    (Object.values(ROLES) as RoleSlug[]).find((r) => held.has(r)) ??
+    undefined;
+  const workspaceName =
+    tenantByOrganizationId(organizationId)?.tenant.name ?? organizationId;
+  const roleLabel = callerRole ? ROLE_DEFINITIONS[callerRole].label : "Member";
+
+  const fields: [string, string | undefined][] = [
+    [
+      "Name",
+      [user.firstName, user.lastName].filter(Boolean).join(" ") || undefined,
+    ],
+    ["Email", user.email],
+  ];
 
   return (
-    <>
-      <Flex direction="column" gap="2" mb="7">
-        <Heading size="8" align="center">
-          Account details
-        </Heading>
-        <Text size="5" align="center" color="gray">
-          Below are your account details
+    <Flex direction="column" gap="4" style={{ width: "min(420px, 90vw)" }}>
+      <Flex direction="column" gap="1">
+        <Heading size="7">Account</Heading>
+        <Text color="gray" size="2">
+          {workspaceName} · signed in as {roleLabel}
         </Text>
       </Flex>
 
-      {userFields && (
-        <Flex direction="column" justify="center" gap="3" width="400px">
-          {userFields.map(([label, value]) => (
-            <Flex asChild align="center" gap="6" key={String(value)}>
-              <label>
-                <Text weight="bold" size="3" style={{ width: 100 }}>
-                  {label}
-                </Text>
-
-                <Box flexGrow="1">
-                  <TextField.Root value={String(value) || ""} readOnly />
-                </Box>
-              </label>
+      <Flex direction="column" gap="3">
+        {fields.map(([label, value]) =>
+          value ? (
+            <Flex key={label} justify="between" align="center">
+              <Text color="gray" size="2">
+                {label}
+              </Text>
+              <Text size="3">{value}</Text>
             </Flex>
-          ))}
+          ) : null,
+        )}
+        <Flex justify="between" align="center">
+          <Text color="gray" size="2">
+            Role
+          </Text>
+          <Badge>{roleLabel}</Badge>
         </Flex>
-      )}
-    </>
+      </Flex>
+    </Flex>
   );
 }

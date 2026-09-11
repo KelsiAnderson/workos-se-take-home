@@ -12,8 +12,8 @@ import {
 } from "@workos-inc/authkit-nextjs/components";
 
 export const metadata: Metadata = {
-  title: "Example AuthKit Authenticated App",
-  description: "Example Next.js application demonstrating how to use AuthKit.",
+  title: "Meridian Analytics",
+  description: "Meridian Analytics — your team's workspace.",
 };
 
 export default function RootLayout({
