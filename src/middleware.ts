@@ -56,4 +56,6 @@ function forceReauth(request: NextRequest, organizationId?: string) {
 }
 
 // Match against the pages
-export const config = { matcher: ["/", "/account/:path*", "/api/:path*"] };
+export const config = {
+  matcher: ["/", "/account/:path*", "/members/:path*", "/api/:path*"],
+};

@@ -46,6 +46,10 @@ export default function RootLayout({
                             <Button asChild variant="soft">
                               <NextLink href="/account">Account</NextLink>
                             </Button>
+
+                            <Button asChild variant="soft">
+                              <NextLink href="/members">Members</NextLink>
+                            </Button>
                           </Flex>
 
                           <SignInButton />

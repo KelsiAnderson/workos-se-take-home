@@ -1,6 +1,6 @@
-import { getWorkOS } from "@workos-inc/authkit-nextjs";
 import { NextResponse } from "next/server";
 import { requireWorkspace } from "@/lib/workspace";
+import { listPendingInvitations } from "@/lib/invitations";
 
 // Lists the workspace's pending invitations.
 //
@@ -8,32 +8,15 @@ import { requireWorkspace } from "@/lib/workspace";
 // session. Read-only, so any member of the workspace may call it (the
 // compliance role needs visibility into everything in flight); mutations live
 // on /invitations/[id] and require admin.
-//
-// The projection deliberately omits `token` and `acceptInvitationUrl` — those
-// are the secret an invitee uses to claim the account and must never reach the
-// browser.
 export async function GET() {
   const workspace = await requireWorkspace();
   if (workspace instanceof NextResponse) return workspace;
-  const { organizationId } = workspace;
 
   try {
-    const invitations = await getWorkOS()
-      .userManagement.listInvitations({ organizationId })
-      .then((page) => page.autoPagination());
-
-    const pending = invitations
-      .filter((invitation) => invitation.state === "pending")
-      .map((invitation) => ({
-        id: invitation.id,
-        email: invitation.email,
-        state: invitation.state,
-        expiresAt: invitation.expiresAt,
-      }));
-
-    return NextResponse.json({ invitations: pending });
+    const invitations = await listPendingInvitations(workspace.organizationId);
+    return NextResponse.json({ invitations });
   } catch (error) {
-    console.error("listInvitations failed", error);
+    console.error("listPendingInvitations failed", error);
     return NextResponse.json(
       { error: "Could not list invitations" },
       { status: 502 },
