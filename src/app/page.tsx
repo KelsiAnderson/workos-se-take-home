@@ -45,7 +45,7 @@ export default async function HomePage() {
     <Flex direction="column" align="center" gap="2">
       <Heading size="8">Meridian Analytics</Heading>
       <Text size="5" color="gray" mb="4">
-        Sign in to your team's workspace
+        Sign in to your team&apos;s workspace
       </Text>
       <Flex align="center" gap="3">
         <SignInButton large />
