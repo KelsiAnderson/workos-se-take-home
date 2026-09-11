@@ -101,6 +101,17 @@ export async function POST(request: NextRequest) {
     };
     return NextResponse.json({ invite: payload }, { status: 201 });
   } catch (error) {
+    // WorkOS rejects a second invite while one is still pending for the same
+    // email — that's a real conflict, not an upstream failure, so it gets its
+    // own 409 instead of falling into the generic 502 below.
+    const { status, message } = error as { status?: number; message?: string };
+    if (status === 400 && /already invited/i.test(message ?? "")) {
+      return NextResponse.json(
+        { error: "This email already has a pending invitation to this workspace" },
+        { status: 409 },
+      );
+    }
+
     // Log the detail server-side; return a generic message so we don't leak
     // upstream internals or confirm/deny account existence in the response.
     console.error("sendInvitation failed", error);

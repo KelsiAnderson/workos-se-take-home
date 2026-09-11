@@ -267,6 +267,22 @@ describe("POST /api/get-name/members/invite", () => {
     expect(mockSendInvitation).not.toHaveBeenCalled();
   });
 
+  it("returns 409 when WorkOS reports the email already has a pending invite", async () => {
+    mockWithAuth.mockResolvedValue(session());
+    const workosError = Object.assign(new Error("Email already invited to organization."), {
+      status: 400,
+    });
+    mockSendInvitation.mockRejectedValueOnce(workosError);
+
+    const res = await POST(inviteRequest({ email: "new@acme.test" }));
+    const body = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(body).toEqual({
+      error: "This email already has a pending invitation to this workspace",
+    });
+  });
+
   it("returns a generic 502 when the WorkOS call fails", async () => {
     mockWithAuth.mockResolvedValue(session());
     mockSendInvitation.mockRejectedValueOnce(new Error("boom: user already invited"));
