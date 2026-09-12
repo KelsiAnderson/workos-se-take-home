@@ -160,7 +160,9 @@ try {
 ## Act 3 — Three personas (2:45–4:00)
 
 > **⚠️ Decision needed before recording this act.** Acme is SSO-only, and your
-> Okta trial signs you in via Google federation as `kelsi@ochithreads.com`.
+> Okta trial signs you in as a native Okta account, `kelsi@ochithreads.com`,
+> re-challenged for its password on every sign-in (Okta's Authentication
+> Policy re-auth frequency is set to "every time").
 > There's no clean second/third Okta identity to sign in as without a real
 > second email you control. Script below uses **Option B** — reroling your one
 > identity in the WorkOS dashboard between segments. If you have two more real
@@ -170,7 +172,7 @@ try {
 **UI — Team Lead:**
 1. Tab 2 → Organizations → Acme Corp → **Members** → click `kelsi@ochithreads.com` → **Role → Team Lead** → Save.
    *(Note out loud: this is the WorkOS dashboard editing the membership directly — it does **not** go through our `canGrantRole` or last-admin guard. That's expected: the dashboard is the platform operator's break-glass control, separate from the tenant-facing app.)*
-2. Tab 1 → **Sign Out** → **Sign in to Acme Corp (Okta)** again. *(Role is baked into the session at auth time — a page refresh alone won't pick up the change, you have to fully re-authenticate. Since Okta/Google still has you signed in, this should flash through with no password prompt.)*
+2. Tab 1 → **Sign Out** → **Sign in to Acme Corp (Okta)** again. *(Role is baked into the session at auth time — a page refresh alone won't pick up the change, you have to fully re-authenticate. Okta is set to re-prompt on every sign-in, so you'll re-enter the account password here — have it ready.)*
 3. `/members`: no role selects, no Remove column on the table (you're not admin) — but the invite form is present, and its role dropdown offers only **Team Lead** and **Compliance**, no **Admin**.
 
 **UI — Compliance:**

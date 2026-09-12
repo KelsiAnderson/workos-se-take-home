@@ -258,8 +258,9 @@ user" from "valid response, Okta just isn't re-prompting."
 
 1. **Home page → "Sign in to Acme Corp (Okta)".** Point out this goes to Acme's
    *own* Okta, not a WorkOS login.
-2. **Authenticate in Okta.** (In the trial, `kelsi@ochithreads.com` federates
-   through Google — that's Okta's config, not ours.)
+2. **Authenticate in Okta.** (In the trial, `kelsi@ochithreads.com` is a
+   native Okta account with its own password, challenged on every sign-in —
+   that's Okta's config, not ours.)
 3. **Land back in the app.** `/account` shows the email, name, and **Role**, all
    from the WorkOS session.
 4. **`GET /api/members`** returns the Acme roster read live from WorkOS —
