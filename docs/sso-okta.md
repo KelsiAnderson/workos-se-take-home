@@ -82,16 +82,28 @@ Two important properties:
 | Use this for Recipient / Destination | checked |
 | Audience URI (SP Entity ID) | `g5ffp41p8CNEEr06eV99EX10g` |
 | Name ID format | `Unspecified` |
-| Application username | `Custom` → `user.getInternalProperty("id")` |
+| Application username | `Custom` — mapped via **General → SAML Settings → Configure profile mapping**, `login` and `email` fields, not typed directly into the Sign On tab |
 | Update application username on | Create and update |
 
-Attribute Statements (Name format `Basic`):
+Attribute Statements — this Okta org runs the newer "EL for OIE" expression
+language, which requires the `user.profile.{property}` form. Bare `user.email`
+and functions like `user.getInternalProperty("id")` both fail validation here
+(`Invalid property …` / `Invalid function name …`) even though they're the
+syntax shown in older Okta SAML guides:
 
-| Name | Value |
+| Name | Expression |
 | --- | --- |
-| `email` | `user.email` |
-| `firstName` | `user.firstName` |
-| `lastName` | `user.lastName` |
+| `id` | `user.profile.login` |
+| `email` | `user.profile.email` |
+| `firstName` | `user.profile.firstName` |
+| `lastName` | `user.profile.lastName` |
+
+All four are **required** — WorkOS's connection has `idpId`/`email`/`firstName`/`lastName`
+each marked Required in its Attribute mapping (Connection → Attribute mapping).
+Missing any of them fails the whole SAML response with a generic
+`{"code": "server_error", "message": "Invalid SAML Response"}` in WorkOS's
+Events log — it does not say which attribute is missing, or that attributes
+are the problem at all.
 
 No group attribute — roles are assigned in WorkOS (see decision 3).
 
@@ -138,10 +150,15 @@ then use the **"Sign in to Acme Corp (Okta)"** button on the home page.
    provisioned without an explicit role lands read-only, matching `DEFAULT_ROLE`
    in `src/lib/roles.ts`. Admin access is granted deliberately.
 
-5. **Name ID = `Unspecified`; Application username = Okta's internal user ID.**
-   Per WorkOS's Okta guide. WorkOS gets a stable identifier that survives the
-   user changing their email; the human-readable email and name come from the
-   mapped attribute statements.
+5. **Name ID = `Unspecified`, value = the user's email; Application username
+   is sourced from the Profile Mapping, not typed into the Sign On tab.**
+   WorkOS pulls email from the NameID *and* from the `email` attribute
+   statement, so both need to actually carry the email — not a display name.
+   The per-app username is driven by **General → Configure profile mapping**
+   (`login`/`email` fields); the individual "Assigned Applications" entry for
+   a user (Directory → People → *user* → Applications) can also carry a
+   manually-typed override that silently wins over the mapping, with no
+   indication in the UI that it's doing so — see §6.
 
 6. **The member directory reads live from WorkOS.** `GET /api/members`
    previously read a static in-memory seed, so invitations, role changes,
@@ -193,16 +210,35 @@ a similar setup.
 | Only `admin` and `member` roles existed in WorkOS | `member` is the scaffold default; the brief's three personas weren't created | Create `team_lead` and `compliance`; slugs must match `src/lib/roles.ts` |
 | After a successful SSO login, the session had **`organizationId: null` and `role: null`** — every API route returned `401 "missing active workspace"` | The SSO login authenticated the user but **did not create an Organization membership** in Acme. WorkOS/AuthKit only attaches an org + role to the session when the user has a membership. | Add the membership (manually for now: Organizations → Acme Corp → Members → add user → role); enable **JIT provisioning** on the connection so this is automatic for real users |
 | Changed a role in WorkOS but the app still showed the old one | The role is baked into the access token at sign-in. WorkOS docs: *"Roles are granted to SSO profiles when the user authenticates."* | Sign out and back in |
+| NameID kept coming through as the user's **display name** ("Kelsi Anderson Ochi") instead of their email, no matter what the Custom username expression or profile mapping said | The per-user **Assigned Applications** entry (Directory → People → *user* → Applications → pencil icon next to the app) carries its own manually-typed username, entered once at assignment time, which silently overrides any mapping or expression — nothing in the Sign On tab or Profile Mapping UI shows that an override exists | Edit the per-user assignment directly and set it to the real email |
+| WorkOS Events logged `authentication.sso_failed`, `{"code": "server_error", "message": "Invalid SAML Response"}` — identical message before *and* after the NameID fix above, with `email: null` both times | The Okta app had **zero Attribute Statements configured**. WorkOS's connection requires `idpId`/`email`/`firstName`/`lastName` (Connection → Attribute mapping, all marked Required) and fails the whole response as a generic, undifferentiated error when any are missing — it never says "missing attribute," so this looks identical to a signature or config problem | Add all four Attribute Statements (see §3.2). Confirmed via `signxml` that the Response- and Assertion-level signatures were valid and the cert matched WorkOS's trusted cert the whole time — the failure was purely the missing attributes, not crypto |
+| Attribute Statement expressions errored: `Invalid property email in expression user.email`, `Invalid function name getInternalProperty in expression user.getInternalProperty('id')`, `Invalid property login in expression user.login` | This Okta org uses the newer "EL for OIE" expression language, which only accepts `user.profile.{property}` — the bare `user.{property}` form and `getInternalProperty()` from older Okta SAML guides aren't supported in this dialog | Use `user.profile.email`, `user.profile.firstName`, `user.profile.lastName`, `user.profile.login` |
+| SSO "succeeded" per Okta's own System Log, but signing in through the app showed AuthKit's generic email/social chooser and sent an email one-time code instead of going to Okta | Acme Corp's WorkOS Organization policy is **"SSO required for domain members"** — scoped to a verified domain. The test identity's email domain (`ochithreads.com`) wasn't registered as a domain on the org, so WorkOS treated the sign-in as a guest and didn't enforce SSO | Organizations → Acme Corp → add `ochithreads.com` as a verified domain |
+| After every fix above, sign-in kept silently completing with no visible Okta prompt at all — looked identical whether something was still broken or genuinely fixed | Okta's **Authentication Policy** for the app (Security → Authentication Policies → the policy assigned to this app, e.g. "Any two factors" → its rule) had **Re-authentication frequency: Every 12 hours**, so Okta silently reused the existing session on every retry regardless of app-side or browser-side changes — this is *separate* from the SSO session cookie and isn't cleared by a normal sign-out | Set the rule's re-authentication frequency to "Every time user signs in to resource" while actively debugging or recording a repeatable demo |
+
+The bottom two rows in particular are worth calling out: several of these
+problems produced *the exact same symptom* (generic error, or "nothing
+happens"), so the only reliable way to tell them apart was decoding the raw
+`SAMLResponse` payload (base64 → XML) from the browser's Network tab and
+checking it directly — the WorkOS dashboard and Okta admin UI's own error
+text were not specific enough to distinguish "bad NameID" from "missing
+attributes" from "valid response, org policy doesn't require SSO for this
+user" from "valid response, Okta just isn't re-prompting."
 
 ---
 
 ## 7. Automatic vs. manual / known limitations
 
-- **JIT provisioning is not yet enabled on the connection.** The first SSO user
-  had to be added to the Acme organization by hand. Turning on JIT provisioning
-  (connection settings) makes "an Acme employee just signs in through Okta"
-  work with no WorkOS-side step — which is the actual requirement. Do this
-  before the demo.
+- **JIT provisioning is enabled** (Organization → Authentication → User
+  provisioning → "JIT-provision SSO users"). A new Acme employee's first Okta
+  sign-in now creates their org membership automatically, no WorkOS-side
+  manual step required — this satisfies the "no ticket to us" part of
+  requirement 4.
+- **Okta's Authentication Policy re-authentication frequency is set to
+  "Every time user signs in to resource"** for the demo/debug period, so the
+  SSO prompt is visible on every attempt. This trades away Okta's normal
+  frictionless-repeat-login convenience; a real Acme rollout would likely want
+  a longer window (e.g. the default 12h) once the integration is stable.
 - **One SSO identity is set up so far** (`kelsi@ochithreads.com`, admin). A
   second Okta user provisioned as `compliance` or `team_lead` would demonstrate
   requirement 3 through real SSO rather than only through tests.
