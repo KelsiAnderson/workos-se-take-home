@@ -27,7 +27,7 @@ Try it out! Grab a row below, sign in with those credentials at the deployed URL
 
 ## 3. Requirement map
 
-One row per requirement as you understood them from the brief. Your enumeration is part of the answer.
+Here's how I read each requirement — where I built it, and where I made a judgment call.
 
 | Scenario requirement | Where it's addressed (route / file / dashboard surface) | Notes on your interpretation |
 | --------------------- | --------------------------------------------------------- | ------------------------------ |
@@ -42,32 +42,53 @@ One row per requirement as you understood them from the brief. Your enumeration 
 
 How you worked with AI on this engagement. Be specific: name files, prompts, and moments.
 
-- **Tools used**: Claude Code, with the WorkOS agent skills (`workos`, `workos-widgets`) installed per the README, for implementation, tests, and the `docs/` reference material (`sso-okta.md`, `security-policies.md`, `implementation-overview.md`, `demo-script.md`).
-- **Two or three things the AI produced that you kept, and why**:
-  - The `canGrantRole` / `GRANTABLE_BY_ROLE` matrix in `src/lib/roles.ts`, separating "who may invite" from "who may grant a given role." It closed a real privilege-escalation path (a team lead could otherwise mint a new admin) that wasn't obvious from the brief alone.
-  - The HMAC-signed `sess_start` cookie approach in `src/lib/session-policy.ts` for the Northwind 24h cap, once we established WorkOS session length is environment-wide, not per-org. Fail-closed by construction: no stamp or a bad signature forces re-auth rather than granting benefit of the doubt.
-  - Rewriting the member directory to read live from `listOrganizationMemberships` + `listUsers` instead of a static in-memory seed (`src/lib/db.ts`, since deleted) — the static version went "split-brain" the moment an invite or role change happened, which would have been an embarrassing thing to hit live in the demo.
-- **Two or three things you rejected or reworked, and why**:
-  - An early version returned a generic `502` for every WorkOS failure, including "this email already has a pending invite" — that's a real client-correctable conflict, not an upstream outage, so it now gets its own `409` with a clear message (`src/app/api/get-name/members/invite/route.ts`).
-  - When Okta's SSO started silently completing with no visible prompt during live debugging, the AI's first fix was "sign out of Google and Okta manually before each attempt." That didn't work and wasted a round trip — the real cause was Okta's Authentication Policy re-authentication frequency (12h), a policy-level setting that ignores a plain sign-out. Reworked into a real fix: set the policy rule's re-auth frequency to "every time" (see `docs/sso-okta.md` §6, last row).
-- **The prompt or technique that paid off most**: Refusing to keep debugging from the WorkOS dashboard's and Okta admin UI's own error text (`"Invalid SAML Response"`, `oauth_provider_generic_error` — both too generic to act on) and instead pulling the actual `SAMLResponse` out of the browser's Network tab (DevTools → Copy as cURL, grabbed via clipboard so nothing got hand-retyped) and decoding the base64 XML directly. That's what actually distinguished "NameID is a display name, not an email" from "no attribute statements at all" from "valid response, org policy just doesn't require SSO for this user" — three different bugs that all produced near-identical symptoms in the dashboards.
-- **The worst thing the AI gave you**: A long string of plausible-sounding but wrong guesses during the Okta debugging, made from indirect signals (UI text, console noise, generic error codes) instead of asking for the raw payload up front. In order:
-  1. Pointed at a classic "Configure SAML" wizard / Name ID format dropdown in Okta that didn't exist in this org's admin UI version — had to be corrected before finding the real location.
-  2. Three wrong attribute-statement expression forms in a row (`user.email` → "Invalid property email", `user.getInternalProperty('id')` → "Invalid function name", `user.login` → "Invalid property login") before landing on the correct `user.profile.{property}` syntax, which only turned up after actually fetching Okta's own docs instead of guessing again.
-  3. Sent me to edit the Username field directly on the person's Okta profile (Directory → People), which Okta blocked ("Username is set by Acme Corp - WorkOS") — wrong path entirely; the real fix was the per-app "Assigned Applications" override on that person.
-  4. Chased a certificate-mismatch theory for the generic "Invalid SAML Response" error, which took decoding and cryptographically verifying the signature with `signxml` to rule out — the actual cause (missing Attribute Statements) was unrelated to the cert.
-  5. When sign-in started silently completing with no visible prompt, first fix was "sign out of Google and Okta manually" — wrong; the real cause was Okta's Authentication Policy re-authentication frequency (12h), which a plain sign-out doesn't touch.
-  6. Pointed at a "Global Session Policy → Sign On tab" location in Okta admin for that re-auth setting, which also didn't exist in this org's UI — the setting turned out to live inside the app's assigned Authentication Policy rule instead.
+**Tools used:** Claude Code with the WorkOS agent skills (`workos`, `workos-widgets`) installed per the README. Used for full implementation, unit/integration test coverage, and generating reference materials under `docs/` (`sso-okta.md`, `security-policies.md`, `implementation-overview.md`, and `demo-script.md`).
 
-  Every one of these got corrected only because I pushed back with what was actually on screen rather than accepting the first explanation. The pattern that broke the cycle was insisting on raw evidence (the actual SAML payload, the actual WorkOS Events entry, the actual Okta docs) over guessing from UI descriptions — see "prompt that paid off most" above.
+**Two or three things the AI produced that you kept, and why:**
+
+- The `canGrantRole` / `GRANTABLE_BY_ROLE` matrix in `src/lib/roles.ts`: It neatly separated "who can invite" from "who can assign a specific role." This closed a critical privilege-escalation path (a Team Lead using invites to mint new Admins) that wasn't explicitly flagged in the prompt.
+- The HMAC-signed `sess_start` cookie approach in `src/lib/session-policy.ts`: Once we realized WorkOS session lengths are global across the environment rather than per-organization, this gave us a clean, fail-closed way to enforce Northwind's 24-hour session cap. If the cookie timestamp is missing or the HMAC signature fails, it defaults to forcing re-authentication rather than giving the user the benefit of the doubt.
+- Replacing static in-memory data with live WorkOS API calls: Re-wrote the member directory to pull dynamically from `listOrganizationMemberships` and `listUsers` instead of relying on a static seed file (`src/lib/db.ts`). The static version broke synchronization the moment an invite was sent or a role was updated — something that would have completely derailed a live demo.
+
+**Two or three things you rejected or reworked, and why:**
+
+- Generic upstream error handling: The initial code mapped every WorkOS SDK failure to a generic `502 Bad Gateway`, including client errors like inviting an email that already had a pending invite. I reworked this in `src/app/api/get-name/members/invite/route.ts` to catch duplicate invites specifically and return a `409 Conflict` with a clear, user-facing error message.
+- Flawed Okta re-authentication advice: When Okta SAML logins started silently completing without prompting for credentials during testing, the AI originally suggested manually clearing browser cookies and logging out of Google/Okta before every test run. This wasted time and didn't solve the root issue. The real fix was identifying Okta's application-level Authentication Policy re-authentication frequency setting (defaulted to 12 hours) and setting the rule to require re-authentication "every time" (documented in `docs/sso-okta.md` §6).
+
+**The prompt or technique that paid off most:**
+Refusing to debug blindly from high-level UI error messages ("Invalid SAML Response" or `oauth_provider_generic_error`) and instead extracting the raw `SAMLResponse` directly from the browser's Network tab. Copying the network request as cURL, decoding the base64 XML payload locally, and inspecting the actual SAML assertions made it immediately clear whether we were dealing with a malformed NameID format, missing Attribute Statements, or an unapplied SSO policy. Having the exact payload on hand cut through three completely different root causes that all produced identical error screens in the dashboard.
+
+**The worst thing the AI gave you:**
+A chain of plausible-sounding but wrong guesses during Okta SAML debugging because it relied on indirect error screens rather than raw payload inspection:
+
+- Non-existent UI paths: Guided me to look for a legacy "Configure SAML" wizard and a "Global Session Policy → Sign On" tab that didn't exist in our Okta admin console version.
+- Incorrect attribute syntax: Generated three invalid Okta expression variants (`user.email`, `user.getInternalProperty('id')`, `user.login`) before landing on the correct `user.profile.{property}` format — which I only resolved after pulling Okta's actual documentation.
+- Blocked profile edits: Suggested updating the user's email directly under Directory → People, which Okta blocked because the account was provisioned externally ("Username is set by Acme Corp - WorkOS"). The actual fix was setting an app-level assignment override.
+- Misleading certificate theories: Chased a false certificate-mismatch lead for the generic "Invalid SAML Response" error. Proving the signature was cryptographically valid required decoding and verifying it with `signxml`, only to confirm the real issue was simply missing Attribute Statements.
+
+Every single one of these got corrected because I pushed back using what was actually rendering on my screen and in my network tab rather than taking the suggested steps at face value.
 
 ## 5. Pushback
 
-Anything in the brief you'd push back on as the SE, and what you'd propose instead.
+Anything in the brief you'd push back on as the SE, and what you'd propose instead:
 
-- **"Can the demo just call the WorkOS API directly from the frontend with the API key?"** No. A secret key shipped to the browser is visible in the JS bundle and in every DevTools Network request — any signed-in user (or anyone who opens dev tools) would have the same power as your backend: create/remove members, escalate roles, and query any Organization, since a raw API key isn't scoped to "the caller's org and role." It also throws away every check we built in — `canGrantRole`, the last-admin lockout, CSRF validation — because those live in our route handlers, not in WorkOS's API surface. Proposal (already built): keep the API key server-side only, proxy every mutation through your own backend route handlers, and let the session cookie (not a client-supplied credential) carry identity, tenant, and role.
-- **The brief says "admins can invite people"** — I read this as "admins, plus team leads for their own reports," since requirement 3 explicitly gives team leads responsibility for "their own people," and a self-serve model where every new hire needs an admin is not really self-serve for a team lead. `canGrantRole` caps what a team lead can grant (never admin) so this reading doesn't reopen the privilege-escalation risk above.
-- **"Admins have to sign in with MFA" (requirement 5)** — WorkOS's per-organization MFA policy has no admin-only mode; it's all-or-nothing for the org's non-SSO members. Rather than treat that as a gap, I'd tell Priya's team it's a stricter guarantee than they asked for (every Northwind user is covered, not just admins) and confirm that's acceptable before they roll it out to a customer who might have opinions about MFA friction for non-admin staff.
+**"Can the demo just call the WorkOS API directly from the frontend with the API key?"**
+
+The pushback: Absolutely not. Exposing a secret API key in client-side code bundles or browser network requests gives any user full administrative control over your entire WorkOS tenant — including reading, inviting, or removing members across any organization. It also bypasses every backend security control we built (`canGrantRole` matrix, last-admin lockout, and CSRF protection).
+
+What we did instead: Kept the WorkOS API key strictly server-side in Node.js, proxied all administrative mutations through our own Next.js API route handlers, and derived identity, workspace context, and permissions exclusively from HTTP-only session cookies.
+
+**"Only Admins can invite team members"**
+
+The pushback: In a real B2B enterprise application, requiring an Admin to handle every single user invite creates an operational bottleneck that defeats the purpose of self-serve team management.
+
+What we did instead: Interpreted requirement 3 ("Team leads need to manage their own people") as allowing Team Leads to invite members to their team, while using our `canGrantRole` matrix to strictly cap what roles they can assign. A Team Lead can invite another Team Lead or a Compliance user, but can never grant Admin privileges. This satisfies self-serve requirements without opening privilege escalation risks.
+
+**"Admins have to sign in with MFA"**
+
+The pushback: WorkOS enforces MFA policies at the Organization level rather than at the individual role level. In AuthKit, enabling "Require MFA" applies to all non-SSO logins across the entire workspace, not just users with an admin role.
+
+What we did instead: Enforced the MFA policy at the organization level for Northwind Traders, ensuring complete coverage. In a customer conversation with Priya's team, I would position this as a strictly stronger security guarantee than originally requested (protecting all workspace users) while verifying their team doesn't require lower-friction access for non-admin accounts.
 
 ## 6. Cut list
 
