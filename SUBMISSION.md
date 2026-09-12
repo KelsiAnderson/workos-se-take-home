@@ -6,9 +6,9 @@ Fill in every section and commit this file to your repo. Reviewers work from thi
 
 Deployed URL, repo, and demo video.
 
-- **Deployed app**: _pending — Vercel deploy in progress, will fill in before final submission_
+- **Deployed app**: https://workos-se-take-home.vercel.app/
 - **Repo**: https://github.com/KelsiAnderson/workos-se-take-home
-- **Video**: _pending — recorded from `docs/demo-script.md` once the deployed URL is live_
+- **Video**: https://www.youtube.com/watch?v=ArBMPjkEobU
 
 ## 2. Test credentials
 
