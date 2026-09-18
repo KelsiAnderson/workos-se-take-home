@@ -216,17 +216,18 @@ doesn't reset the clock.
 
 ---
 
-## Known gaps / cut list (roughly in priority order)
+## Known gaps / cut list
 
-1. **No UI for the member APIs.** SSO, RBAC, and the endpoints behind
-   requirements 2–3 work and are tested, but a reviewer clicking the deployed app
-   can't invite / re-role / remove without a frontend.
-2. **JIT provisioning not enabled** on the Acme SSO connection — the first member
-   was added by hand. One dashboard toggle.
-3. **No deployed URL** / production redirect URI in WorkOS.
-4. **`SUBMISSION.md` not filled in** (requirement map, decision log, pushback).
-5. Single session per browser — switching between customer workspaces needs a
-   sign-out. Normal for a B2B app; worth one line in the writeup.
-6. The `member` WorkOS role exists in the environment but isn't modelled by the
-   app; the `/api/get-name/` path prefix is the scaffold's and was never renamed.
-7. Slack notification on seat changes — explicitly out of scope for the eval.
+This list is kept current in `SUBMISSION.md` §6 — see that for the up-to-date,
+prioritized cut list. (This section previously duplicated it and drifted out
+of sync: the member-management UI, JIT provisioning, the deployed URL, and
+`SUBMISSION.md` itself all shipped after this document was first written, but
+the list below wasn't updated alongside them.)
+
+Two items remain accurate and worth keeping here, since they're implementation
+details rather than roadmap items:
+
+- Single session per browser — switching between customer workspaces needs a
+  sign-out. Normal for a B2B app.
+- The `member` WorkOS role exists in the environment but isn't modelled by the
+  app; the `/api/get-name/` path prefix is the scaffold's and was never renamed.
